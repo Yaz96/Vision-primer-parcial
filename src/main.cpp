@@ -17,6 +17,11 @@
 #include <iostream>
 #include <string.h>
 #include <cmath>
+#include <stdlib.h>
+#include <stdio.h>
+
+
+
 
 using namespace cv;
 using namespace std;
@@ -40,8 +45,29 @@ Mat HistS;
 Mat HistV;
 Mat HistYIQ;
 Mat HistHSV;
+Mat gauIm;
+Mat med,prom;
+Mat DetBordes;
+Mat lapace,LOG;
+Mat aux,aux2,ero;
+Mat dit;
+Mat grad;
+Mat grad_x, grad_y;
+Mat abs_grad_x, abs_grad_y;
+int kernel_size = 3;
+int scale = 1;
+int delta = 0;
+int ddepth = CV_16S;
+int erosion_elem = 0;
+int erosion_size = 4;
+int dilation_elem = 0;
+int dilation_size = 3;
+int const max_elem = 2;
+int const max_kernel_size = 21;
+
 
 bool hist=false, flagBck=false,fre=false, desp=false;
+int MAX_KERNEL_LENGTH = 31;
 
 
 // me quede en hacer los histogramas de YIQ, deberiamos hacer una forma en la que podamos tener mas puntos para muestrear mejor
@@ -66,9 +92,41 @@ void histActualizacion(int R, int G, int B, int Y, int I, int Q,int H, int S, in
 int eraseBack(int counter,int R, int G, int B, int Y, int Q, int I,int H, int V, int S);
 void convertImageRGBtoYIQ(const Mat &sourceImage);
 void convertImageYIQtoRGB(const Mat &sourceImage);
-
-
+void gaussianImage(const Mat &sourceImage, Mat &destinationImage);
+void Median(const Mat &sourceImage, Mat &destinationImage);
+void Edge(const Mat &sourceImage, Mat &destinationImage);
+void lapaciano(const Mat &sourceImage, Mat &destinationImage, Mat &realIamge);
+void lapacianoOFGaussian(const Mat &sourceImage, Mat &destinationImage, Mat &realIamge,Mat &goodImage);
+void promedio(const Mat &sourceImage, Mat &destinationImage);
+void Erosion( int, void*,const Mat &sourceImage, Mat &destinationImage );
+void Dilation( int, void*,Mat &sourceImage, Mat &destinationImage );
+void Gradient(const Mat &sourceImage);
 int thr=100;
+
+Mat FiltroKernel(const Mat &src){
+	static int ind = 0;
+	Mat kernel, dst;
+  Point anchor;
+  double delta;
+  int ddepth;
+  int kernel_size;
+  char* window_name = "filter2D Demo";
+
+  anchor = Point( -1, -1 );
+  delta = 0;
+  ddepth = -1;
+	 namedWindow( window_name, CV_WINDOW_AUTOSIZE );
+
+	kernel_size = 3 + 2*( ind%5 );
+      kernel = Mat::ones( kernel_size, kernel_size, CV_32F )/ (float)(kernel_size*kernel_size);
+
+      /// Apply filter
+      filter2D(src, dst, ddepth , kernel, anchor, delta, BORDER_DEFAULT );
+	return dst;
+	  ind ++ ;
+
+}
+
 int main(int argc, char *argv[])
 {
 int var,var2;
@@ -86,12 +144,13 @@ int var,var2;
     /* Create main OpenCV window to attach callbacks */
     namedWindow("Image");
     setMouseCallback("Image", mouseCoordinatesExampleCallback);
-  
+	
     while (true)
 	{
 		/* Obtain a new frame from camera */
 		if (!fre)
-		camera >> currentImage;
+
+		currentImage = imread("/home/diego96/Desktop/castillo.jpg", CV_LOAD_IMAGE_COLOR);
 
 		
             /* Draw all points */
@@ -178,8 +237,50 @@ int var,var2;
 	desp=true;
 	var2='1';
 	break;
+    case 'n':
+    gaussianImage(BNimage,gauIm);
+    imshow("gaussian",gauIm);
+    break;
+    case 'v':
+    Median(BNimage,med);
+    imshow("Median",med);
+    break;
+    case 'u':
+    Edge(BNimage,DetBordes);
+    imshow("Bordes",DetBordes);
+    break;
+    case '1':
+    lapacianoOFGaussian(currentImage,aux,aux2,LOG);
+    imshow("LOG",LOG);
+    break;
+    case '2':
+    lapaciano(BNimage,aux,lapace);
+    imshow("lapaciano",lapace);
+    break;
+	case '3':
+    promedio(BNimage,prom);
+    imshow("Promedio",prom);
+    break;
+	case '4':
+    Erosion( 0, 0,BNimage, ero );
+    imshow("Erosion",ero);
+    break;
+	case '5':
+	Dilation( 0, 0,BNimage, dit );
+	imshow("Dilatation", dit);
+	break;
+	case '6':
+	Gradient(BNimage);
+	imshow("Gradient", grad);
+	break;
+	case 7:
+	Mat dst;
+	FiltroKernel(currentImage);
+	imshow( window_name, dst );
+	break;
 	default:
 	imshow("Image",currentImage);
+	
 	}
 	}
 	else{
@@ -191,9 +292,9 @@ int var,var2;
 		var2='f';
 		fre = true;
 		hist=true;
-		imshow("HistB",HistB);
-		imshow("HistG",HistG);
-		imshow("HistR",HistR);
+		//imshow("HistB",HistB);
+		//imshow("HistG",HistG);
+		//imshow("HistR",HistR);
 		
 		}
 
@@ -805,3 +906,89 @@ void convertImageYIQtoRGB(const Mat &sourceImage){
     g2=y-0.272*i-0.647*q;
     b2=y-1.106*i+1.703*q;
 }*/
+void gaussianImage(const Mat &sourceImage, Mat &destinationImage)
+{
+        for ( int i = 1; i < MAX_KERNEL_LENGTH; i = i + 2 )
+    {
+        GaussianBlur( sourceImage, destinationImage, Size( i, i ), 0, 0 );
+    }
+
+}
+void Median(const Mat &sourceImage, Mat &destinationImage)
+{
+    for ( int i = 1; i < MAX_KERNEL_LENGTH; i = i + 2 )
+    { 
+        medianBlur ( sourceImage, destinationImage, i);
+    }
+    
+}
+void Edge(const Mat &sourceImage, Mat &destinationImage)
+{
+    for ( int i = 1; i < MAX_KERNEL_LENGTH; i = i + 2 )
+    { 
+        Canny( sourceImage, destinationImage, i,i+1);
+    }
+}
+void lapacianoOFGaussian(const Mat &sourceImage, Mat &destinationImage, Mat &realIamge, Mat &goodImage)
+{
+    GaussianBlur( sourceImage, sourceImage, Size(3,3), 0, 0, BORDER_DEFAULT );
+    BN(sourceImage,destinationImage);
+ Laplacian( destinationImage, realIamge, ddepth, kernel_size, scale, delta, BORDER_DEFAULT );
+ convertScaleAbs( realIamge, goodImage );
+}
+
+void lapaciano(const Mat &sourceImage, Mat &destinationImage, Mat &realIamge)
+{
+   
+ Laplacian( sourceImage, destinationImage, ddepth, kernel_size, scale, delta, BORDER_DEFAULT );
+ convertScaleAbs( destinationImage, realIamge );
+}
+void promedio(const Mat &sourceImage, Mat &destinationImage)
+{
+	for ( int i = 1; i < MAX_KERNEL_LENGTH; i = i + 2 )
+       { 
+		   blur( sourceImage, destinationImage, Size( i, i ), Point(-1,-1) );
+	   }
+}
+void Erosion( int, void*,const Mat &sourceImage, Mat &destinationImage )
+{
+  int erosion_type;
+  if( erosion_elem == 0 ){ erosion_type = MORPH_RECT; }
+  else if( erosion_elem == 1 ){ erosion_type = MORPH_CROSS; }
+  else if( erosion_elem == 2) { erosion_type = MORPH_ELLIPSE; }
+
+  Mat element = getStructuringElement( erosion_type,
+                                       Size( 2*erosion_size + 1, 2*erosion_size+1 ),
+                                       Point( erosion_size, erosion_size ) );
+  /// Apply the erosion operation
+  erode( sourceImage, destinationImage, element );
+}
+void Dilation( int, void*,Mat &sourceImage, Mat &destinationImage )
+{
+  int dilation_type;
+  if( dilation_elem == 0 ){ dilation_type = MORPH_RECT; }
+  else if( dilation_elem == 1 ){ dilation_type = MORPH_CROSS; }
+  else if( dilation_elem == 2) { dilation_type = MORPH_ELLIPSE; }
+
+  Mat element = getStructuringElement( dilation_type,
+                                       Size( 2*dilation_size + 1, 2*dilation_size+1 ),
+                                       Point( dilation_size, dilation_size ) );
+  /// Apply the dilation operation
+  dilate( sourceImage, destinationImage, element );
+}
+
+void Gradient(const Mat &sourceImage)
+{
+	GaussianBlur( sourceImage, sourceImage, Size(3,3), 0, 0, BORDER_DEFAULT );
+	//Scharr( input_gray, grad_x, ddepth, 1, 0, scale, delta, BORDER_DEFAULT );
+	Sobel( sourceImage, grad, ddepth, 1, 0, 3, scale, delta, BORDER_DEFAULT );
+	convertScaleAbs( grad, grad ); // CV_16S -> CV_8U
+ 
+	//Scharr( input_gray, grad_y, ddepth, 0, 1, scale, delta, BORDER_DEFAULT );
+	//Sobel( sourceImage, grad_y, ddepth, 0, 1, 3, scale, delta, BORDER_DEFAULT );
+	//convertScaleAbs( grad_y, abs_grad_y ); // CV_16S -> // CV_16S -> CV_8U
+ 
+	// create the output by adding the absolute gradient images of each x and y direction
+	//addWeighted( abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad );
+}
+
